@@ -20,25 +20,38 @@ class printer:
     """
 
     def __init__(self):
-        self.line_number = get_new_line_number()
-        global line_count
-        with printer_lock:
-            line_count += 1
+        self.reserved_indices = []
     
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
+        self.exit()
+
+    def exit(self):
         global line_count
         with printer_lock:
-            print(reserved_line_buffers[self.line_number])
-            reserved_line_buffers[self.line_number] = None
-            line_count -= 1
+            line_count -= len(self.reserved_indices)
+            for index in self.reserved_indices:
+                print(reserved_line_buffers[index])
+                reserved_line_buffers[index] = None
+
+    def free_lines(self):
+        global line_count
+        line_count -= len(self.reserved_indices)
+        for index in self.reserved_indices:
+            reserved_line_buffers[index] = None
 
     def print(self, s):
-        s = "{erase_line}{s}".format(erase_line=ANSI_ERASE_LINE, s=s)
+        lines = str(s).split('\n')
+        lines = ["{erase_line}{s}".format(erase_line=ANSI_ERASE_LINE, s=s) for s in lines]
+        if len(lines) > len(self.reserved_indices):
+            self.free_lines()
+            self.reserved_indices = reserve_lines(len(lines))
+
         with printer_lock:
-            reserved_line_buffers[self.line_number] = s
+            for index in range(len(lines)):
+                reserved_line_buffers[self.reserved_indices[index]] = lines[index]
         
         print_lines()
 
@@ -50,6 +63,46 @@ def print_lines():
                 print(line, flush=True)
         print(ANSI_CURSOR_UP.format(n=line_count), end='\r')
 
+def reserve_lines(n_lines):
+    """ Reserves n_lines adjacent lines to be printed together.
+    """
+
+    # find if there is n_lines free spaces already
+    base_index = -1
+    n_free = 0
+    for index, line in enumerate(reserved_line_buffers):
+        if line == None:
+            if n_free == 0:
+                base_index = index
+            n_free += 1
+        else:
+            n_free = 0
+            base_index = -1
+
+        if n_free >= n_lines:
+            break
+
+    indices = []
+    if n_free >= n_lines and base_index != -1:
+        for index in range(base_index, base_index + n_lines):
+            reserved_line_buffers[index] = ""
+            indices.append(index)
+    else:
+        base_index = len(reserved_line_buffers) if base_index == -1 else base_index
+
+        for index in range(base_index, len(reserved_line_buffers)):
+            reserved_line_buffers[index] = ""
+            indices.append(index)
+
+        base_index = len(reserved_line_buffers)
+        for i in range(n_lines - len(indices)):
+            reserved_line_buffers.append("")
+            indices.append(base_index + i)
+
+    global line_count
+    line_count += n_lines
+
+    return indices
 
 def get_new_line_number():
     free_index = pyutils.list_find(reserved_line_buffers, None)
