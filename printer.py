@@ -1,6 +1,6 @@
 from threading import Lock
 
-from .cmdtools import *
+from . import cmdtools
 from . import pyutils
 
 printer_lock = Lock()
@@ -19,14 +19,34 @@ class printer:
                 p.print(i)
     """
 
-    def __init__(self):
-        self.reserved_indices = []
+    def __init__(self, number_of_lines=None):
+        self.reserved_indices = reserve_lines(number_of_lines) if number_of_lines else []
     
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         self.exit()
+
+    def get_input(self):
+        """ Makes an input prompt at the end of this printer's lines and returns the input.
+
+            WARNING: do NOT use this when multi-threading!
+        """
+        down_count = 0
+        for index in range(self.reserved_indices[-1]):
+            if reserved_line_buffers[index] is not None:
+                down_count += 1
+
+        print(cmdtools.ANSI_CURSOR_DOWN.format(n=down_count), end='\r')
+        right_count = len(reserved_line_buffers[self.reserved_indices[-1]]) - len(cmdtools.ANSI_ERASE_LINE)
+        print(cmdtools.ANSI_CURSOR_RIGHT.format(n=right_count), end='')
+
+        ret = input()
+
+        print(cmdtools.ANSI_CURSOR_UP.format(n=down_count + 2))  # return to top, +2 takes care of input() newline
+        
+        return ret
 
     def exit(self):
         global line_count
@@ -36,7 +56,7 @@ class printer:
                 print(reserved_line_buffers[index])
                 reserved_line_buffers[index] = None
 
-    def free_lines(self):
+    def clear_lines(self):
         global line_count
         line_count -= len(self.reserved_indices)
         for index in self.reserved_indices:
@@ -44,9 +64,10 @@ class printer:
 
     def print(self, s):
         lines = str(s).split('\n')
-        lines = ["{erase_line}{s}".format(erase_line=ANSI_ERASE_LINE, s=s) for s in lines]
-        if len(lines) > len(self.reserved_indices):
-            self.free_lines()
+        lines = ["{erase_line}{s}".format(erase_line=cmdtools.ANSI_ERASE_LINE, s=s) for s in lines]
+
+        if len(lines) != len(self.reserved_indices):
+            self.clear_lines()
             self.reserved_indices = reserve_lines(len(lines))
 
         with printer_lock:
@@ -61,7 +82,7 @@ def print_lines():
         for line in reserved_line_buffers:
             if line is not None:
                 print(line, flush=True)
-        print(ANSI_CURSOR_UP.format(n=line_count), end='\r')
+        print(cmdtools.ANSI_CURSOR_UP.format(n=line_count), end='\r')
 
 def reserve_lines(n_lines):
     """ Reserves n_lines adjacent lines to be printed together.
