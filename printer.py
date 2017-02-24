@@ -58,9 +58,10 @@ class printer:
 
     def clear_lines(self):
         global line_count
-        line_count -= len(self.reserved_indices)
-        for index in self.reserved_indices:
-            reserved_line_buffers[index] = None
+        with printer_lock:
+            line_count -= len(self.reserved_indices)
+            for index in self.reserved_indices:
+                reserved_line_buffers[index] = None
 
     def print(self, s):
         lines = str(s).split('\n')
@@ -82,6 +83,8 @@ def print_lines():
         for line in reserved_line_buffers:
             if line is not None:
                 print(line, flush=True)
+            else:
+                print(cmdtools.ANSI_ERASE_LINE, end='\r')  # erase any left over artifacts
         print(cmdtools.ANSI_CURSOR_UP.format(n=line_count), end='\r')
 
 def reserve_lines(n_lines):

@@ -60,7 +60,7 @@ def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_pr
                 f.write(chunk)
                 downloaded += len(chunk)
                 if with_progress and total > 0:
-                    pprint.print("{file_name} {progress} ({downloaded} / {total}) [{speed}]".format(
+                    pprint.print("{file_name}\n\t{progress} ({downloaded} / {total}) [{speed}]".format(
                         file_name=os.path.basename(file_path), 
                         progress=progress_bar(downloaded / total, time_started),
                         downloaded=convert_file_size(downloaded),
