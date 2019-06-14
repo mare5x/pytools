@@ -6,7 +6,7 @@ import concurrent.futures
 from functools import wraps
 import math
 
-from .fileutils import *
+from .filetools import *
 from .cmdtools import *
 from . import printer
 
@@ -35,9 +35,9 @@ def get_html_element(url, *args, **kwargs):
 
 def download_url(url, path, *args, **kwargs):
     if range_download_available(url, *args, **kwargs):
-        download_multiple_connections(url, path, *args, **kwargs)
+        return download_multiple_connections(url, path, *args, **kwargs)
     else:
-        download_basic(url, path, *args, **kwargs)
+        return download_basic(url, path, *args, **kwargs)
 
 
 def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_progress=True, **kwargs):
@@ -71,6 +71,8 @@ def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_pr
 
         logging.info('Completed downloading {path} ({size}) (took {time} to finish)'.format(
                     path=file_path, size=total_str if total > 0 else get_file_size(file_path), time=format_seconds(time.time() - time_started)))
+
+    return file_path
 
 
 def range_download_available(url, *args, **kwargs):
@@ -116,6 +118,7 @@ def download_multiple_connections(url, dir_path, *args, file_name="", connection
     join_files(file_path, parts)
     logging.info('Removing .part files for {}'.format(file_path))
     [remove_file(part) for part in parts]
+    return file_path
 
 
 def download_byte_range(url, path, start_range, end_range, *args, **kwargs):

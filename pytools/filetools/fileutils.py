@@ -14,21 +14,12 @@ import logging
 import hashlib
 import glob
 
-# TODO implement max_depth
-# TODO zip source code files
-
-WHITE_LIST_FILES = (".ui", ".py", ".h", ".cpp", ".txt", ".c", ".exe",
-                    ".png", ".PNG", ".jpg", ".jpeg", ".gif", ".pdf", ".avi", ".mp3",
-                    ".mp4", ".epub", ".mobi", ".azw3", ".doc", ".docx", ".ppt", ".pptx")
-BLACK_LIST_DIRS_PREFIX = (".", "_", ".git")
-BLACK_LIST_DIRS_SUFFIX = (".git", ".pdb")
-
 
 def get_date(for_file=False):
     if for_file:
-        return "{}".format(strftime("%Y_%b_%d", gmtime()))
+        return "{}".format(strftime("%Y_%m_%d", gmtime()))
     else:
-        return "{}".format(strftime("%Y %b %d, %a %H:%M:%S", gmtime()))
+        return "{}".format(strftime("%Y %b %d %H:%M:%S", gmtime()))
 
 
 def date_modified(path, pretty=False, traverse=False):
@@ -44,38 +35,10 @@ def date_modified(path, pretty=False, traverse=False):
         return dtime.fromtimestamp(getmtime(path))
 
 
-def name_from_path(path, end="", raw=False):
+def name_from_path(path):
     path = os.path.realpath(path)
-    if raw:
-        return os.path.basename(path)
-    else:
-        return r"{}_{}_BACKUP{}".format(get_date(for_file=True), os.path.basename(path), end)
-
-
-def log_structure(path=".", dirs_only=False, output=sys.stdout):
-    print("Logging on {}\n".format(get_date()), file=output, flush=True)
-    logging.info('Logging structure of {}'.format(path))
-
-    for root, dirs, files in walk(path):
-        try:
-            root_size = sum(getsize(join(root, name)) for name in files)
-        except PermissionError:
-            pass
-
-        # dirs[:] is by reference, dirs = is assignment
-        dirs[:] = [_dir for _dir in dirs if not _dir.startswith(BLACK_LIST_DIRS_PREFIX)
-                   and not _dir.endswith(BLACK_LIST_DIRS_SUFFIX)]
-        files = [_file for _file in files if _file.endswith(WHITE_LIST_FILES)]
-        indent_depth = root.count(os.sep) - path.count(os.sep) - 1
-
-        print("{}{} last modified: {}".format(' ' * 4 * indent_depth, root, date_modified(root, pretty=True)), end='', file=output, flush=True)
-        print(", {} used".format(convert_file_size(root_size)), file=output, flush=True)
-
-        if not dirs_only:
-            for _file in files:
-                print("{}{}".format(' ' * 4 * (indent_depth + 1), _file), file=output, flush=True)
-    logging.info('Finished logging {}'.format(path))
-
+    return os.path.basename(path)
+    
 
 def create_dir(path):
     # dir_name = "{}".format(join(path, get_date(True)))
@@ -165,9 +128,10 @@ def create_filename(full_path):
 def init_log_file(path="."):
     if path == ".":
         path = "{script}_Logs/".format(script=get_script_filename()[0])
-        log_file = create_filename("{path}/{script}_{date}.txt".format(path=path,
-                                                                       script=get_script_filename()[0],
-                                                                       date=get_date(True)))
+        log_file = create_filename(
+            "{path}/{script}_{date}.txt".format(path=path,
+                                                script=get_script_filename()[0],
+                                                date=get_date(True)))
     else:
         log_file = create_filename(path)
     os.makedirs(path, exist_ok=True)
