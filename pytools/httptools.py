@@ -7,12 +7,19 @@ from functools import wraps
 import math
 
 from .filetools import *
-from .cmdtools import *
 from . import printer
-
 
 CHUNK_SIZE = 2 ** 20  # 1 MiB
 
+def progress_bar(progress, time_started):
+    time_left = ((time.time() - time_started) / progress) - (time.time() - time_started)
+    return "{:.2f}% [elapsed: {}, left: {}]".format(progress * 100,
+                                                    format_seconds(time.time() - time_started),
+                                                    format_seconds(time_left))
+
+def format_speed(start_time, _bytes):
+    diff = time.time() - start_time
+    return "{size:>5}/s".format(size=(convert_file_size(_bytes / diff if diff > 0 else _bytes)))
 
 def downloading_log(func):
     wraps(func)
@@ -27,18 +34,15 @@ def downloading_log(func):
         return result
     return inner_log
 
-
 def get_html_element(url, *args, **kwargs):
     r = requests.get(url, *args, **kwargs)
     return html.fromstring(r.text)
-
 
 def download_url(url, path, *args, **kwargs):
     if range_download_available(url, *args, **kwargs):
         return download_multiple_connections(url, path, *args, **kwargs)
     else:
         return download_basic(url, path, *args, **kwargs)
-
 
 def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_progress=True, **kwargs):
     time_started = time.time()
@@ -53,27 +57,26 @@ def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_pr
 
     r = requests.get(url, *args, stream=True, **kwargs)
     downloaded = 0
-    with open(file_path, 'wb') as f, printer.printer() as pprint:
+    with open(file_path, 'wb') as f, printer.block() as block:
         if with_progress: chunk_time = time.time()
         for chunk in r.iter_content(CHUNK_SIZE):
             if chunk:
                 f.write(chunk)
                 downloaded += len(chunk)
                 if with_progress and total > 0:
-                    pprint.print("{file_name}\n\t{progress} ({downloaded} / {total}) [{speed}]".format(
+                    block.print("{file_name}\n\t{progress} ({downloaded} / {total}) [{speed}]".format(
                         file_name=os.path.basename(file_path), 
                         progress=progress_bar(downloaded / total, time_started),
                         downloaded=convert_file_size(downloaded),
                         total=total_str,
                         speed=format_speed(chunk_time, len(chunk))))
                     chunk_time = time.time()
-        if with_progress: pprint.print("Done with {file_path}".format(file_path=file_path))
+        if with_progress: block.print("Done with {file_path}".format(file_path=file_path))
 
         logging.info('Completed downloading {path} ({size}) (took {time} to finish)'.format(
                     path=file_path, size=total_str if total > 0 else get_file_size(file_path), time=format_seconds(time.time() - time_started)))
 
     return file_path
-
 
 def range_download_available(url, *args, **kwargs):
     r = requests.head(url, *args, **kwargs)
@@ -84,7 +87,6 @@ def range_download_available(url, *args, **kwargs):
         headers['Range'] = 'bytes=0-0'
         r = requests.get(url, *args, headers=headers, **kwargs)
         return r.status_code == 206
-
 
 def get_content_length(url, *args, **kwargs):
     r = requests.head(url, *args, **kwargs)
@@ -97,7 +99,6 @@ def get_content_length(url, *args, **kwargs):
             # eg: 'content-range': 'bytes 0-0/10494470'
             content_length = int(r.headers['content-range'].rsplit('/')[1])
     return content_length
-
 
 def download_multiple_connections(url, dir_path, *args, file_name="", connections=5, **kwargs):
     file_path = os.path.join(dir_path, file_name) if file_name else path_from_url(dir_path, url)
@@ -120,7 +121,6 @@ def download_multiple_connections(url, dir_path, *args, file_name="", connection
     [remove_file(part) for part in parts]
     return file_path
 
-
 def download_byte_range(url, path, start_range, end_range, *args, **kwargs):
     with open(path, 'wb') as f:
         headers = kwargs.pop('headers', {})
@@ -128,15 +128,14 @@ def download_byte_range(url, path, start_range, end_range, *args, **kwargs):
 
         r = requests.get(url, *args, stream=True, headers=headers, **kwargs)
 
-        chunk_time = time.time()
+        # chunk_time = time.time()
         for chunk in r.iter_content(CHUNK_SIZE):
             if chunk:
                 f.write(chunk)
-                print(format_speed(chunk_time, len(chunk)), end='\r')
-                chunk_time = time.time()
+                # print(format_speed(chunk_time, len(chunk)), end='\r')
+                # chunk_time = time.time()
 
     return path
-
 
 def download_urls(urls, path, *args, threads=3, **kwargs):
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
@@ -145,12 +144,10 @@ def download_urls(urls, path, *args, threads=3, **kwargs):
         else:
             executor.map(download_url, urls, path, *args, **kwargs)
 
-
 def path_from_url(dir_path, url, overwrite=True):
     dir_path = os.path.abspath(dir_path)
     create_dir(dir_path)
     return os.path.join(dir_path, os.path.basename(url)) if overwrite else create_filename(os.path.join(dir_path, os.path.basename(url)))
-
 
 def threads(num_threads):
     def threaded_download(func):
@@ -161,4 +158,3 @@ def threads(num_threads):
                 return future.result()
         return download
     return threaded_download
-

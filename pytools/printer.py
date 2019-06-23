@@ -1,139 +1,155 @@
-from threading import Lock
+""" Multi-threaded multi-line stdout printer. 
+    NOTE: Terminal must support ANSI escape sequences.
 
-from . import cmdtools
-from . import pyutils
+    Blocks are printed in the order of their creation.
 
-printer_lock = Lock()
-
-reserved_line_buffers = [None]
-line_count = 0
-
-
-class printer:
-    """ Multi-threaded multi-line stdout printer. 
-    
     Usage:
-        with pytools.printer() as p:
-            for i in range(100):
-                time.sleep(.1)
-                p.print(i)
-    """
+    with printer.block() as b:
+        for i in range(10):
+            b.print(i)
+            time.sleep(.1)
+"""
 
-    def __init__(self, number_of_lines=None):
-        self.reserved_indices = reserve_lines(number_of_lines) if number_of_lines else []
+import threading
+
+ANSI_ERASE_LINE = "\x1b[2K\r"
+ANSI_CURSOR_UP = "\x1b[{n}A\r"
+
+# TODO: a solution that doesn't abuse locks.
+# Every operation that modifies the global state or 
+# uses IO gets locked.
+printer_lock = threading.RLock()
+
+# Doubly linked list representation.
+root_block = None
+leaf_block = None
+lines_used = 0
+lines_total = 0
+
+class block:
+    """ Encapsulates a single multi-line string (=block). """
+
+    def __init__(self, s=None, silent=False):
+        """ If silent is True, then exit silently when using a with statement. 
+            Otherwise, the block is flushed. 
+        """
+        self.silent = silent
+        self.prev = None
+        self.next = None
+        self.lines = []
+        with printer_lock:
+            if s is not None: 
+                self.update(s)
+            add_block(self)
     
+    def __len__(self):
+        """ NOTE: An object that doesn’t define a __bool__() method and 
+            whose __len__() method returns zero is considered to be false in a Boolean context. """
+        return len(self.lines)
+
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         self.exit()
 
-    def get_input(self):
-        """ Makes an input prompt at the end of this printer's lines and returns the input.
-
-            WARNING: do NOT use this when multi-threading!
-        """
-        down_count = 0
-        for index in range(self.reserved_indices[-1]):
-            if reserved_line_buffers[index] is not None:
-                down_count += 1
-
-        print(cmdtools.ANSI_CURSOR_DOWN.format(n=down_count), end='\r')
-        right_count = len(reserved_line_buffers[self.reserved_indices[-1]]) - len(cmdtools.ANSI_ERASE_LINE)
-        print(cmdtools.ANSI_CURSOR_RIGHT.format(n=right_count), end='')
-
-        ret = input()
-
-        print(cmdtools.ANSI_CURSOR_UP.format(n=down_count + 2))  # return to top, +2 takes care of input() newline
-        
-        return ret
+    def __iter__(self):
+        for line in self.lines:
+            yield line
 
     def exit(self):
-        global line_count
         with printer_lock:
-            line_count -= len(self.reserved_indices)
-            for index in self.reserved_indices:
-                print(reserved_line_buffers[index])
-                reserved_line_buffers[index] = None
+            if not self.silent:
+                self.flush()
+            self.discard()
 
-    def clear_lines(self):
-        global line_count
+    def update(self, s):
         with printer_lock:
-            line_count -= len(self.reserved_indices)
-            for index in self.reserved_indices:
-                reserved_line_buffers[index] = None
+            lines = str(s).split('\n')
+            diff = len(lines) - len(self.lines)
+            self.lines = lines
+            update_line_count(diff)
 
-    def print(self, s):
-        lines = str(s).split('\n')
-        lines = ["{erase_line}{s}".format(erase_line=cmdtools.ANSI_ERASE_LINE, s=s) for s in lines]
-
-        if len(lines) != len(self.reserved_indices):
-            self.clear_lines()
-            self.reserved_indices = reserve_lines(len(lines))
-
+    def discard(self):
+        """ The block is removed, without printing anything. """
         with printer_lock:
-            for index in range(len(lines)):
-                reserved_line_buffers[self.reserved_indices[index]] = lines[index]
-        
-        print_lines()
+            remove_block(self, self.silent)
 
+    def flush(self):
+        """ The block is outputted to the screen. """
+        with printer_lock:
+            for line in self.lines:
+                print_line(line, flush=True)
+
+    def print(self, s=None):
+        """ Note: Calling print() changes the contents of the current block. All blocks are printed. """ 
+        with printer_lock:
+            if s is not None: 
+                self.update(s)
+            print_lines()
+
+def add_block(node):
+    global root_block
+    global leaf_block
+
+    with printer_lock:
+        if root_block is not None:
+            leaf_block.next = node
+        else:
+            root_block = node
+
+        node.prev = leaf_block
+        leaf_block = node
+
+def remove_block(node, silent):
+    global lines_total, lines_used
+    global root_block, leaf_block
+
+    with printer_lock:
+        lines_used -= len(node)
+        if not silent:
+            lines_total -= len(node)
+
+        left = node.prev
+        right = node.next
+        if left is not None:  # See __len__ note as to why this is a None check.
+            left.next = right
+        else:
+            root_block = right
+
+        if right is not None:
+            right.prev = left
+        else:
+            leaf_block = left
+
+def update_line_count(diff):
+    global lines_used, lines_total
+
+    with printer_lock:
+        lines_used += diff
+        lines_total = max(lines_total, lines_used)
+
+def print_line(s, **kwargs):
+    with printer_lock:
+        print(ANSI_ERASE_LINE, end='\r')
+        print(s, **kwargs)
+
+def print_blocks():
+    with printer_lock:
+        cur_block = root_block
+        while cur_block is not None:
+            for line in cur_block:
+                print_line(line)
+            cur_block = cur_block.next
 
 def print_lines():
     with printer_lock:
-        for line in reserved_line_buffers:
-            if line is not None:
-                print(line, flush=True)
-            else:
-                print(cmdtools.ANSI_ERASE_LINE, end='\r')  # erase any left over artifacts
-        print(cmdtools.ANSI_CURSOR_UP.format(n=line_count), end='\r')
+        # It is assumed that the cursor position is correct when calling this function.
+        print_blocks()
 
-def reserve_lines(n_lines):
-    """ Reserves n_lines adjacent lines to be printed together.
-    """
+        # Print the remaining blank lines.
+        # Without this, old lines might get printed (when a block shrinks).
+        for i in range(lines_total - lines_used):
+            print_line("")
 
-    # find if there is n_lines free spaces already
-    base_index = -1
-    n_free = 0
-    for index, line in enumerate(reserved_line_buffers):
-        if line == None:
-            if n_free == 0:
-                base_index = index
-            n_free += 1
-        else:
-            n_free = 0
-            base_index = -1
-
-        if n_free >= n_lines:
-            break
-
-    indices = []
-    if n_free >= n_lines and base_index != -1:
-        for index in range(base_index, base_index + n_lines):
-            reserved_line_buffers[index] = ""
-            indices.append(index)
-    else:
-        base_index = len(reserved_line_buffers) if base_index == -1 else base_index
-
-        for index in range(base_index, len(reserved_line_buffers)):
-            reserved_line_buffers[index] = ""
-            indices.append(index)
-
-        base_index = len(reserved_line_buffers)
-        for i in range(n_lines - len(indices)):
-            reserved_line_buffers.append("")
-            indices.append(base_index + i)
-
-    global line_count
-    line_count += n_lines
-
-    return indices
-
-def get_new_line_number():
-    free_index = pyutils.list_find(reserved_line_buffers, None)
-    if free_index is not None:
-        reserved_line_buffers[free_index] = ""
-    else:
-        reserved_line_buffers.append("")
-        free_index = len(reserved_line_buffers) - 1
-
-    return free_index
+        print(ANSI_CURSOR_UP.format(n=lines_total), end='\r', flush=True)
