@@ -1,25 +1,28 @@
 import requests
-import os
 from lxml import html
+
+import os
 import logging
 import concurrent.futures
-from functools import wraps
 import math
+import time
+from functools import wraps
 
-from .filetools import *
+from . import filetools as ft
 from . import printer
 
 CHUNK_SIZE = 2 ** 20  # 1 MiB
 
 def progress_bar(progress, time_started):
-    time_left = ((time.time() - time_started) / progress) - (time.time() - time_started)
+    t = time.time()
+    time_left = ((t - time_started) / progress) - (t - time_started)
     return "{:.2f}% [elapsed: {}, left: {}]".format(progress * 100,
-                                                    format_seconds(time.time() - time_started),
-                                                    format_seconds(time_left))
+                                                    ft.format_seconds(t - time_started),
+                                                    ft.format_seconds(time_left))
 
 def format_speed(start_time, _bytes):
     diff = time.time() - start_time
-    return "{size:>5}/s".format(size=(convert_file_size(_bytes / diff if diff > 0 else _bytes)))
+    return "{size:>5}/s".format(size=(ft.convert_file_size(_bytes / diff if diff > 0 else _bytes)))
 
 def downloading_log(func):
     wraps(func)
@@ -30,7 +33,7 @@ def downloading_log(func):
         logging.info('Downloading {url} to {path}'.format(url=url, path=path))
         result = func(*args, **kwargs)
         logging.info('Completed downloading {path} ({size}) (took {time} to finish)'.format(
-                      path=path, size=get_file_size(path), time=format_seconds(time.time() - time_started)))
+                      path=path, size=ft.get_file_size(path), time=ft.format_seconds(time.time() - time_started)))
         return result
     return inner_log
 
@@ -48,7 +51,7 @@ def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_pr
     time_started = time.time()
 
     total = get_content_length(url, *args, **kwargs)
-    total_str = convert_file_size(total)
+    total_str = ft.convert_file_size(total)
 
     if not file_path:
         file_path = os.path.join(dir_path, file_name) if file_name else path_from_url(dir_path, url)
@@ -67,14 +70,14 @@ def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_pr
                     block.print("{file_name}\n\t{progress} ({downloaded} / {total}) [{speed}]".format(
                         file_name=os.path.basename(file_path), 
                         progress=progress_bar(downloaded / total, time_started),
-                        downloaded=convert_file_size(downloaded),
+                        downloaded=ft.convert_file_size(downloaded),
                         total=total_str,
                         speed=format_speed(chunk_time, len(chunk))))
                     chunk_time = time.time()
         if with_progress: block.print("Done with {file_path}".format(file_path=file_path))
 
         logging.info('Completed downloading {path} ({size}) (took {time} to finish)'.format(
-                    path=file_path, size=total_str if total > 0 else get_file_size(file_path), time=format_seconds(time.time() - time_started)))
+                    path=file_path, size=total_str if total > 0 else ft.get_file_size(file_path), time=ft.format_seconds(time.time() - time_started)))
 
     return file_path
 
@@ -116,9 +119,9 @@ def download_multiple_connections(url, dir_path, *args, file_name="", connection
     parts = [future.result() for future in futures]
     parts.sort()
     logging.info('Concatenating downloaded parts to {}'.format(file_path))
-    join_files(file_path, parts)
+    ft.join_files(file_path, parts)
     logging.info('Removing .part files for {}'.format(file_path))
-    [remove_file(part) for part in parts]
+    [ft.remove_file(part) for part in parts]
     return file_path
 
 def download_byte_range(url, path, start_range, end_range, *args, **kwargs):
@@ -146,8 +149,8 @@ def download_urls(urls, path, *args, threads=3, **kwargs):
 
 def path_from_url(dir_path, url, overwrite=True):
     dir_path = os.path.abspath(dir_path)
-    create_dir(dir_path)
-    return os.path.join(dir_path, os.path.basename(url)) if overwrite else create_filename(os.path.join(dir_path, os.path.basename(url)))
+    ft.create_dir(dir_path)
+    return os.path.join(dir_path, os.path.basename(url)) if overwrite else ft.create_filename(os.path.join(dir_path, os.path.basename(url)))
 
 def threads(num_threads):
     def threaded_download(func):

@@ -1,18 +1,18 @@
-from datetime import datetime as dtime
-from time import strftime, gmtime
 import time
 import os
-from os.path import join, getsize, getmtime
-from contextlib import contextmanager
 import shutil
-try:
-    from os import walk
-except ImportError:
-    from scandir import walk
 import sys
 import logging
 import hashlib
 import glob
+from datetime import datetime as dtime
+from time import strftime, gmtime
+from os.path import join, getsize, getmtime
+from contextlib import contextmanager
+try:
+    from os import walk
+except ImportError:
+    from scandir import walk
 
 
 def get_date(for_file=False):
