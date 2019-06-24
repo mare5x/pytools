@@ -62,6 +62,10 @@ class block:
             if not self.silent:
                 self.flush()
             self.discard()
+            # If no more prints are issued, simply discarding would
+            # leave behind old artifacts.
+            if self.silent:
+                print_lines()
 
     def update(self, s):
         with printer_lock:

@@ -48,8 +48,28 @@ def block_test4(s):
         time.sleep(random.random())
         b.print(s)
 
-def block_test_single():
-    with printer.block(silent=True) as b:
+def block_test5(s):
+    with printer.block() as b:
+        for i in range(len(s)):
+            b.print(s[:i])
+            time.sleep(0.05)
+        for i in range(len(s)):
+            b.print(s[:len(s) - i - 1])
+            time.sleep(0.05)
+        b.print(s)
+
+def block_test_tall(silent):
+    LINES = 20
+    blocks = [printer.block(silent=silent) for i in range(LINES)]
+    for i in range(LINES):
+        blocks[i].print(str(i) * i)
+        time.sleep(0.05)
+    for i in range(LINES):
+        blocks[LINES - i - 1].exit()
+        time.sleep(0.05)
+
+def block_test_single(silent):
+    with printer.block(silent=silent) as b:
         b.print("Single")
 
 def thread_test1():
@@ -84,12 +104,15 @@ def thread_test6():
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
         [ ex.submit(block_test4, str(i) * 5) for i in range(5) ]
 
-block_test_single()
+block_test_single(False)
+block_test_single(True)
 block_test0()
 block_test1()
 block_test2()
 block_test3()
 block_test4("12345")
+block_test5("ASDF" * 10)
+block_test_tall(True)
 
 thread_test1()
 thread_test2()
