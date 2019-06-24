@@ -29,11 +29,19 @@ lines_total = 0
 class block:
     """ Encapsulates a single multi-line string (=block). """
 
-    def __init__(self, s=None, silent=False):
-        """ If silent is True, then exit silently when using a with statement. 
-            Otherwise, the block is flushed. 
+    def __init__(self, s=None, silent=False, split=True, max_line_width=80):
+        """ silent: if True, exit silently when using a with statement (or .exit()). 
+                Otherwise, the block is flushed. 
+
+            split: if True, lines longer than max_line_width will get split up
+                into shorter lines. Otherwise, they will get cut off.
+
+            max_line_width: The character limit of each line. 
         """
         self.silent = silent
+        self.split = split
+        self.max_line_width = max_line_width
+
         self.prev = None
         self.next = None
         self.lines = []
@@ -67,9 +75,19 @@ class block:
             if self.silent:
                 print_lines()
 
+    def split_string(self, s):
+        long_lines = str(s).split('\n')
+        lines = []
+        for line in long_lines:
+            if self.split:
+                lines.extend(split_line(line, self.max_line_width))
+            else:
+                lines.append(cut_line(line, self.max_line_width))
+        return lines
+
     def update(self, s):
         with printer_lock:
-            lines = str(s).split('\n')
+            lines = self.split_string(s)
             diff = len(lines) - len(self.lines)
             self.lines = lines
             update_line_count(diff)
@@ -91,6 +109,19 @@ class block:
             if s is not None: 
                 self.update(s)
             print_lines()
+
+def cut_line(line, width):
+    return line[:width]
+
+def split_line(line, width):
+    n = len(line)
+    if n == 0: return [line]
+    lines = []
+    for i in range(0, n, width):
+        left = i
+        right = min(n, left + width)
+        lines.append(line[left:right])
+    return lines
 
 def add_block(node):
     global root_block
