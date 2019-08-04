@@ -1,3 +1,4 @@
+import math
 import time
 import os
 import shutil
@@ -15,11 +16,8 @@ except ImportError:
     from scandir import walk
 
 
-def get_date(for_file=False):
-    if for_file:
-        return "{}".format(strftime("%Y_%m_%d", gmtime()))
-    else:
-        return "{}".format(strftime("%Y %b %d %H:%M:%S", gmtime()))
+def get_current_date_string():
+    return strftime("%Y_%m_%d", gmtime())
 
 
 def date_modified(path, pretty=False, traverse=False):
@@ -35,10 +33,16 @@ def date_modified(path, pretty=False, traverse=False):
         return dtime.fromtimestamp(getmtime(path))
 
 
-def name_from_path(path):
-    path = os.path.realpath(path)
-    return os.path.basename(path)
-    
+def path_filter(path, replace="_"):
+    """Full normalized path with replaced separators.
+    Example: "c:\\program files\\folder" -> "c__program_files__folder"."""
+    path = normalize_path(path)
+    drive, rel = os.path.splitdrive(path)
+    drive = drive.replace(':', replace * 2)
+    rel = rel.strip(os.path.sep).replace(os.path.sep, replace * 2)
+    rel = rel.replace(" ", replace)
+    return drive + rel
+
 
 def create_dir(path):
     # dir_name = "{}".format(join(path, get_date(True)))
@@ -56,18 +60,15 @@ def remove_file(path):
         os.remove(path)
 
 
-def zip_dir(path_to_zip, name=None, save_path=".\\"):
-    if name:
-        return shutil.make_archive(save_path + name, "zip", path_to_zip)
-    return shutil.make_archive(save_path + get_date(for_file=True), "zip", path_to_zip)
+def zip_dir(path, dst_filename=None, dst_dir=".", format="zip"):
+    if dst_filename is None:
+        dst_filename = os.path.dirname(path)
+    base_name = os.path.join(dst_dir, dst_filename)
+    return shutil.make_archive(base_name, format=format, root_dir=path)
 
 
 def format_seconds(secs):
-    """
-    Calculate hours, minutes, seconds from seconds.
-
-    Return tuple (h, min, s)
-    """
+    """Calculate hours, minutes, seconds from seconds."""
     # divmod = divide and modulo -- divmod(1200 / 1000)  =  (1, 200)
     mins, secs = divmod(secs, 60)
     hours, mins = divmod(mins, 60)
@@ -90,14 +91,15 @@ def convert_file_size(_bytes):
     Note:
         Units are in octets. E.g.: 1 MiB = 2**20 bytes (8 bits = 1 octet)
     """
-    kb = _bytes / 1024
-
-    if (kb / 1024**2) >= 1:
-        return "{:.2f} GiB".format(kb / 1024**2)
-    elif (kb / 1024) >= 1:
-        return "{:.2f} MiB".format(kb / 1024)
+    p = math.log2(_bytes) if _bytes > 0 else 0
+    if p >= 30:
+        return "{:.2f} GiB".format(_bytes / 2**30)
+    elif p >= 20:
+        return "{:.2f} MiB".format(_bytes / 2**20)
+    elif p >= 10:
+        return "{:.2f} KiB".format(_bytes / 2**10)
     else:
-        return "{:.2f} KiB".format(kb)
+        return "{} B".format(_bytes)
 
 
 def parent_dir(path, rel=False):
@@ -125,23 +127,19 @@ def create_filename(full_path):
     return new_path
 
 
-def init_log_file(path="."):
-    if path == ".":
-        path = "{script}_Logs/".format(script=get_script_filename()[0])
-        log_file = create_filename(
-            "{path}/{script}_{date}.txt".format(path=path,
-                                                script=get_script_filename()[0],
-                                                date=get_date(True)))
-    else:
-        log_file = create_filename(path)
-    os.makedirs(path, exist_ok=True)
+def init_log_file(filename, dirpath="./logs/", overwrite=False, mode="a", level=logging.INFO):
+    dirpath = create_dir(dirpath)
+    path = os.path.join(dirpath, filename)
+    if not overwrite:
+        path = create_filename(path)
 
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
-    formatter = logging.Formatter(u"%(levelname)s:%(asctime)s:%(threadName)s: %(message)s")
-    file_handler = logging.FileHandler(log_file, 'w', 'utf-8')
+    root_logger.setLevel(level)
+    formatter = logging.Formatter("%(levelname)s:%(asctime)s:%(threadName)s: %(message)s")
+    file_handler = logging.FileHandler(path, mode=mode, encoding='utf-8')
     file_handler.setFormatter(formatter)
     root_logger.addHandler(file_handler)
+    return path
 
 
 def get_script_filename():
@@ -150,7 +148,7 @@ def get_script_filename():
     return os.path.splitext(os.path.basename(sys.argv[0]))
 
 
-def create_empty_file(path, size):
+def create_empty_file(path, size=0):
     with open(path, 'wb') as f:
         f.truncate(size)
     return path
