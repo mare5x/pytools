@@ -22,6 +22,11 @@ class progressbar:
             p.update()
             ...
 
+        with progressbar() as p:
+            p.update()
+            or
+            p.set_progress()
+
     For a thread-safe version, or if you want to display
     multiple progress bars use 'blockbar' (pytools.printer integration).
     """
@@ -39,7 +44,9 @@ class progressbar:
         self.max_width = max_width
 
         self.count = 0
+        self.progress = None  # float [0,1]
         self.start_time = time.time()
+        self.max_length = 0
 
     def __iter__(self):
         # Implemented as a generator function.
@@ -61,18 +68,23 @@ class progressbar:
         self.count += amount
         self.write()
 
+    def set_progress(self, progress):
+        self.progress = progress
+        self.update(0)
+
     def close(self):
+        self.progress = 1 if self.progress else None
         self.count = self.total
         self.write(end='\n')
 
     def format_bar(self):
         """
         Progress bar format:
-        <desc> [####   ] <.2f> % [MM:SS || MM:SS]
-               |-------|        elapsed || remaining
+        <desc> [####   ] <.2f> % [MM:SS | MM:SS]
+               |-------|        elapsed | remaining
                  width
 
-        The dummy progress bar's format (total unknown):
+        The dummy progress bar's format (progress unknown):
         <desc> [####   ] [MM:SS]
 
         <max_width> will only shrink <desc>!
@@ -80,7 +92,7 @@ class progressbar:
 
         dt = time.time() - self.start_time
 
-        dummy = self.total <= 0
+        dummy = self.progress is None and self.total <= 0
         if dummy:
             # # If there is no progress defined, animate a dummy progress bar.
             # animation_length = 0.5  # seconds
@@ -88,7 +100,9 @@ class progressbar:
             M = 3
             progress = (self.count % (M + 1)) / M if self.count != self.total else 1
         else:
-            progress = self.count / self.total
+            progress = self.progress if self.progress \
+                else (self.count / self.total if self.total > 0 \
+                else (0))
 
         fill_count = round(progress * self.bar_width)
         bar = self.bar_fill * fill_count
@@ -100,10 +114,9 @@ class progressbar:
 
         if self.show_time:
             elapsed = format_seconds(dt)
-
             if dummy:
                 bar += " [{}]".format(elapsed)
-            else:    
+            else:
                 remaining = format_seconds((dt / progress) - dt) if progress > 0 else "inf"
                 bar += " [{} | {}]".format(elapsed, remaining)
         
@@ -113,12 +126,15 @@ class progressbar:
         else:
             desc = self.desc
         desc += " " + bar
+
+        # Pad the string with blanks in case the bar shrunk ...
+        # (Only the remaining time part can shrink.)
+        pad = max(0, self.max_length - len(desc))
+        self.max_length = max(self.max_length, len(desc))
+        desc += ' ' * pad
         return desc
 
     def write(self, end=''):
-        # Note: the progress bar can but grow, it cannot 
-        # shrink. Therefore, each print will completely overwrite
-        # the previously displayed progress bar.
         print(self.format_bar() + end, end='\r')
 
 

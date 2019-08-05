@@ -7,7 +7,7 @@ A collection of common tools for Python scripts.
   * pytools.**httptools** contains file downloading functions.
   * pytools.**filetools** contains common tools for dealing with files, as well as the **tree** module.
   * pytools.**printer** is a multi-threaded multi-line stdout printer. 
-  * pytools.**cache** is a LRU cache implementation.
+  * pytools.**cache** contains a LRU cache implementation.
   * pytools.**progressbar** contains a simple progress bar implementation that works with pytools.printer.
 
 ### Requirements

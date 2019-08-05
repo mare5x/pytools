@@ -30,6 +30,12 @@ def test_length():
     for i in progressbar.progressbar(range(10), desc="A" * 999, max_width=100):
         fuzz()
 
+def test_progress():
+    with progressbar.progressbar(desc="Progress test") as p:
+        for step in range(500):
+            p.set_progress(pow(step / 500, 3))
+            time.sleep(2 / 500)
+
 def test_block_iterator():
     iterable = [i for i in range(20)]
     for i in progressbar.blockbar(iterable, desc="Block iterable test"):
@@ -52,6 +58,12 @@ def test_block_length():
     for i in progressbar.blockbar(range(10), desc="A" * 999, max_width=100):
         fuzz()
 
+def test_block_progress():
+    with progressbar.blockbar(desc="Progress test") as p:
+        for step in range(500):
+            p.set_progress(pow(step / 500, 3))
+            time.sleep(2 / 500)
+
 def test_block_multiline():
     for i in progressbar.blockbar(range(20), desc="This blockbar spans multiple lines!\n\t"):
         fuzz()
@@ -62,6 +74,7 @@ def test_block_multi():
         ex.submit(test_block_dummy)
         ex.submit(test_block_manual)
         ex.submit(test_block_length)
+        ex.submit(test_block_progress)
         ex.submit(test_block_multiline)
 
 
@@ -70,6 +83,7 @@ if __name__ == "__main__":
     test_dummy()
     test_manual()
     test_length()
+    test_progress()
     test_block_iterator()
     test_block_dummy()
     test_block_manual()
