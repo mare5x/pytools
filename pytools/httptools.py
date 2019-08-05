@@ -9,16 +9,11 @@ import time
 from functools import wraps
 
 from . import filetools as ft
-from . import printer
+from . import progressbar
+
 
 CHUNK_SIZE = 2 ** 20  # 1 MiB
 
-def progress_bar(progress, time_started):
-    t = time.time()
-    time_left = ((t - time_started) / progress) - (t - time_started)
-    return "{:.2f}% [elapsed: {}, left: {}]".format(progress * 100,
-                                                    ft.format_seconds(t - time_started),
-                                                    ft.format_seconds(time_left))
 
 def format_speed(start_time, _bytes):
     diff = time.time() - start_time
@@ -58,26 +53,20 @@ def download_basic(url, *args, dir_path=".", file_name="", file_path="", with_pr
 
     logging.info('Downloading {url} to {path}'.format(url=url, path=file_path))
 
+    if with_progress: 
+        pbar = progressbar.blockbar(total=total, 
+            desc="{file} ({total})\n\t".format(file=os.path.basename(file_path), total=total_str))
     r = requests.get(url, *args, stream=True, **kwargs)
-    downloaded = 0
-    with open(file_path, 'wb') as f, printer.block() as block:
-        if with_progress: chunk_time = time.time()
+    with open(file_path, 'wb') as f:
         for chunk in r.iter_content(CHUNK_SIZE):
             if chunk:
                 f.write(chunk)
-                downloaded += len(chunk)
-                if with_progress and total > 0:
-                    block.print("{file_name}\n\t{progress} ({downloaded} / {total}) [{speed}]".format(
-                        file_name=os.path.basename(file_path), 
-                        progress=progress_bar(downloaded / total, time_started),
-                        downloaded=ft.convert_file_size(downloaded),
-                        total=total_str,
-                        speed=format_speed(chunk_time, len(chunk))))
-                    chunk_time = time.time()
-        if with_progress: block.print("Done with {file_path}".format(file_path=file_path))
-
-        logging.info('Completed downloading {path} ({size}) (took {time} to finish)'.format(
-                    path=file_path, size=total_str if total > 0 else ft.get_file_size(file_path), time=ft.format_seconds(time.time() - time_started)))
+                if with_progress: 
+                    pbar.update(len(chunk))
+    if with_progress:
+        pbar.close()
+    logging.info('Completed downloading {path} ({size}) (took {time} to finish)'.format(
+                path=file_path, size=total_str if total > 0 else ft.get_file_size(file_path), time=ft.format_seconds(time.time() - time_started)))
 
     return file_path
 

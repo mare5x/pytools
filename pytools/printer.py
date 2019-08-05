@@ -29,7 +29,7 @@ lines_total = 0
 class block:
     """ Encapsulates a single multi-line string (=block). """
 
-    def __init__(self, s=None, silent=False, split=True, max_line_width=80):
+    def __init__(self, s=None, silent=False, split=True, max_line_width=120):
         """ silent: if True, exit silently when using a with statement (or .exit()). 
                 Otherwise, the block is flushed. 
 
