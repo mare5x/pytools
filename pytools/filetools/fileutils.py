@@ -173,6 +173,8 @@ def join_files(out_path, in_path, *in_paths, out_mode='wb', in_mode='rb'):
 
 def real_case_filename(path):
     """
+    NOTE: On windows, file paths are case insensitive. However, on unix they 
+    are case sensitive.
     "c:/users/mare5/projects/backuper/logs/2016_apr_01.txt" -> 2016_Apr_01.txt
     "c:/users/mare5/projects/backuper/logs" -> Logs
     """
@@ -180,8 +182,8 @@ def real_case_filename(path):
     name = "{}[{}]".format(path[:-1], path[-1])
     found_path = glob.glob(name)
     if found_path:
-        return found_path[0].rsplit('\\', 1)[-1]
-    return path
+        path = found_path[0]
+    return os.path.basename(path)
 
 
 def md5sum(path):
